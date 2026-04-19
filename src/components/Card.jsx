@@ -1,12 +1,7 @@
-import MuiCard from '@mui/material/Card'
-import CardContent from '@mui/material/CardContent'
-
-export default function Card({ children, contentSx, sx, ...props }) {
+export default function Card({ children, className = '', ...props }) {
   return (
-    <MuiCard sx={{ borderRadius: 4, ...sx }} {...props}>
-      <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 }, ...contentSx }}>
-        {children}
-      </CardContent>
-    </MuiCard>
+    <div className={`rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 ${className}`} {...props}>
+      {children}
+    </div>
   )
 }

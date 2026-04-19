@@ -1,20 +1,11 @@
-import MuiButton from '@mui/material/Button'
-
-export default function Button({ children, sx, ...props }) {
+export default function Button({ children, className = '', type = 'button', ...props }) {
   return (
-    <MuiButton
-      variant="contained"
-      sx={{
-        borderRadius: 3,
-        textTransform: 'none',
-        fontWeight: 600,
-        px: 2,
-        py: 1.2,
-        ...sx,
-      }}
+    <button
+      type={type}
+      className={`rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       {...props}
     >
       {children}
-    </MuiButton>
+    </button>
   )
 }

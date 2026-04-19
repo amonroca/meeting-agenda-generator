@@ -1,153 +1,136 @@
 import { useMemo, useState } from 'react'
-import {
-  Avatar,
-  Box,
-  Divider,
-  Drawer,
-  IconButton,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Stack,
-  Toolbar,
-  Typography,
-  useMediaQuery,
-} from '@mui/material'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import EventNoteRoundedIcon from '@mui/icons-material/EventNoteRounded'
 import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded'
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useTheme } from '@mui/material/styles'
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
-const drawerWidth = 260
+function navItemClass(isActive) {
+  return `flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition ${
+    isActive
+      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+  }`
+}
+
+function Sidebar({ menuItems, user, onClose, onLogout }) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-sm font-bold text-white">
+            M
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Meeting Hub</p>
+            <p className="text-xs text-slate-500">Agenda Generator</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
+        >
+          <CloseRoundedIcon fontSize="small" />
+        </button>
+      </div>
+
+      <nav className="space-y-1 px-3 py-4">
+        {menuItems.map((item) => {
+          const Icon = item.icon
+
+          return (
+            <NavLink key={item.path} to={item.path} onClick={onClose} className={({ isActive }) => navItemClass(isActive)}>
+              <Icon fontSize="small" />
+              <span>{item.label}</span>
+            </NavLink>
+          )
+        })}
+      </nav>
+
+      <div className="mt-auto border-t border-slate-200 px-4 py-4">
+        <div className="mb-3 rounded-2xl bg-slate-50 p-3">
+          <p className="text-sm font-semibold text-slate-900">{user?.name || 'Usuário'}</p>
+          <p className="truncate text-xs text-slate-500">{user?.email}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onLogout}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          <LogoutRoundedIcon fontSize="small" />
+          Sair
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function AppLayout() {
-  const theme = useTheme()
-  const isDesktop = useMediaQuery(theme.breakpoints.up('md'))
   const [mobileOpen, setMobileOpen] = useState(false)
   const { user, logout } = useAuth()
-  const location = useLocation()
   const navigate = useNavigate()
 
   const menuItems = useMemo(
     () => [
-      { label: 'Dashboard', path: '/dashboard', icon: <DashboardRoundedIcon /> },
-      { label: 'Reuniões', path: '/meetings', icon: <EventNoteRoundedIcon /> },
-      { label: 'Tarefas', path: '/tasks', icon: <AssignmentTurnedInRoundedIcon /> },
-      { label: 'Configurações', path: '/settings', icon: <SettingsRoundedIcon /> },
+      { label: 'Dashboard', path: '/dashboard', icon: DashboardRoundedIcon },
+      { label: 'Reuniões', path: '/meetings', icon: EventNoteRoundedIcon },
+      { label: 'Tarefas', path: '/tasks', icon: AssignmentTurnedInRoundedIcon },
+      { label: 'Configurações', path: '/settings', icon: SettingsRoundedIcon },
     ],
     [],
   )
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
     navigate('/login')
   }
 
-  const drawerContent = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', px: 2 }}>
-      <Toolbar disableGutters sx={{ py: 2, px: 1 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Avatar sx={{ bgcolor: 'primary.main' }}>M</Avatar>
-          <Box>
-            <Typography variant="subtitle1" fontWeight={700}>
-              Meeting Hub
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Agenda Generator
-            </Typography>
-          </Box>
-        </Stack>
-      </Toolbar>
-
-      <List sx={{ display: 'grid', gap: 0.5 }}>
-        {menuItems.map((item) => (
-          <ListItemButton
-            key={item.path}
-            component={NavLink}
-            to={item.path}
-            onClick={() => setMobileOpen(false)}
-            selected={location.pathname === item.path}
-            sx={{
-              borderRadius: 3,
-              '&.active, &.Mui-selected': {
-                bgcolor: 'primary.main',
-                color: '#fff',
-                '& .MuiListItemIcon-root': { color: '#fff' },
-              },
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} />
-          </ListItemButton>
-        ))}
-      </List>
-
-      <Box sx={{ mt: 'auto', mb: 2 }}>
-        <Divider sx={{ mb: 2 }} />
-        <Stack spacing={0.5} sx={{ px: 1, mb: 1.5 }}>
-          <Typography variant="body2" fontWeight={600}>
-            {user?.name || 'Usuário'}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {user?.email}
-          </Typography>
-        </Stack>
-        <ListItemButton onClick={handleLogout} sx={{ borderRadius: 3 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <LogoutRoundedIcon />
-          </ListItemIcon>
-          <ListItemText primary="Sair" />
-        </ListItemButton>
-      </Box>
-    </Box>
-  )
-
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {!isDesktop && (
-        <IconButton
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="fixed left-0 right-0 top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
+        <div>
+          <p className="text-sm font-semibold">Meeting Hub</p>
+          <p className="text-xs text-slate-500">Agenda Generator</p>
+        </div>
+        <button
+          type="button"
           onClick={() => setMobileOpen(true)}
-          sx={{ position: 'fixed', top: 12, left: 12, zIndex: 1301, bgcolor: '#fff' }}
+          className="rounded-xl border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
         >
-          <MenuRoundedIcon />
-        </IconButton>
+          <MenuRoundedIcon fontSize="small" />
+        </button>
+      </div>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden" onClick={() => setMobileOpen(false)}>
+          <aside
+            className="h-full w-72 bg-white shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Sidebar
+              menuItems={menuItems}
+              user={user}
+              onClose={() => setMobileOpen(false)}
+              onLogout={handleLogout}
+            />
+          </aside>
+        </div>
       )}
 
-      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
-        <Drawer
-          variant={isDesktop ? 'permanent' : 'temporary'}
-          open={isDesktop ? true : mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          ModalProps={{ keepMounted: true }}
-          sx={{
-            '& .MuiDrawer-paper': {
-              width: drawerWidth,
-              borderRight: '1px solid rgba(15, 23, 42, 0.08)',
-              backgroundImage: 'none',
-            },
-          }}
-        >
-          {drawerContent}
-        </Drawer>
-      </Box>
+      <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-slate-200 bg-white lg:block">
+        <Sidebar menuItems={menuItems} user={user} onClose={() => {}} onLogout={handleLogout} />
+      </aside>
 
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: { xs: 2, md: 4 },
-          ml: { md: 0 },
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-        }}
-      >
+      <main className="px-4 pb-6 pt-20 lg:ml-72 lg:px-8 lg:pt-8">
         <Outlet />
-      </Box>
-    </Box>
+      </main>
+    </div>
   )
 }

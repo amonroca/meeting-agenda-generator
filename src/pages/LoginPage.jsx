@@ -1,13 +1,9 @@
 import { useState } from 'react'
-import { Alert, Box, Stack, Typography } from '@mui/material'
-import { useLocation, useNavigate } from 'react-router-dom'
-import Button from '../components/Button'
-import Card from '../components/Card'
-import Input from '../components/Input'
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 export default function LoginPage() {
-  const { login } = useAuth()
+  const { login, isConfigured } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [email, setEmail] = useState('admin@meetinghub.com')
@@ -33,51 +29,80 @@ export default function LoginPage() {
   }
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        px: 2,
-        background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)',
-      }}
-    >
-      <Card sx={{ width: '100%', maxWidth: 440 }}>
-        <Stack spacing={3} component="form" onSubmit={handleSubmit}>
-          <Box>
-            <Typography variant="h4" gutterBottom>
-              Acessar plataforma
-            </Typography>
-            <Typography color="text.secondary">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 px-4 py-10">
+      <div className="mx-auto grid max-w-6xl items-center gap-8 lg:grid-cols-2">
+        <div className="hidden lg:block">
+          <div className="mb-4 inline-flex items-center rounded-full bg-white/80 px-3 py-1 text-sm font-medium text-blue-700 shadow-sm ring-1 ring-slate-200">
+            Meeting Hub
+          </div>
+          <h1 className="text-4xl font-bold tracking-tight text-slate-900">
+            Organize reuniões, atas e tarefas em um só lugar.
+          </h1>
+          <p className="mt-4 max-w-xl text-lg text-slate-600">
+            Acesse sua plataforma com integração ao Supabase e acompanhe o fluxo completo das reuniões da estaca.
+          </p>
+        </div>
+
+        <div className="mx-auto w-full max-w-md rounded-3xl bg-white p-8 shadow-xl ring-1 ring-slate-200">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-900">Entrar</h2>
+            <p className="mt-2 text-sm text-slate-500">
               Faça login para visualizar reuniões, tarefas e configurações.
-            </Typography>
-          </Box>
+            </p>
+          </div>
 
-          {error && <Alert severity="error">{error}</Alert>}
+          <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+            {error && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
 
-          <Input
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+            {!isConfigured && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                O Supabase ainda não está configurado para este ambiente.
+              </div>
+            )}
 
-          <Input
-            label="Senha"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Email</span>
+              <input
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="voce@exemplo.com"
+              />
+            </label>
 
-          <Button type="submit" disabled={loading}>
-            {loading ? 'Entrando...' : 'Entrar'}
-          </Button>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Senha</span>
+              <input
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Sua senha"
+              />
+            </label>
 
-          <Typography variant="body2" color="text.secondary">
-            Demo: use qualquer email e senha para acessar o dashboard.
-          </Typography>
-        </Stack>
-      </Card>
-    </Box>
+            <button
+              type="submit"
+              disabled={loading || !isConfigured}
+              className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? 'Entrando...' : 'Entrar'}
+            </button>
+          </form>
+
+          <p className="mt-6 text-sm text-slate-600">
+            Ainda não possui conta?{' '}
+            <RouterLink to="/register" className="font-semibold text-blue-700 hover:text-blue-600">
+              Criar conta
+            </RouterLink>
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
