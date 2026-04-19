@@ -1,62 +1,180 @@
 import { createContext, useEffect, useMemo, useState } from 'react'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const AuthContext = createContext(undefined)
-const TOKEN_KEY = 'meeting_agenda_token'
-const USER_KEY = 'meeting_agenda_user'
+
+function formatAuthError(error) {
+  const message = error?.message || 'Falha na autenticação.'
+  const normalized = message.toLowerCase()
+
+  if (normalized.includes('invalid login credentials')) {
+    return 'Email ou senha inválidos.'
+  }
+
+  if (normalized.includes('email not confirmed')) {
+    return 'Confirme o email antes de entrar.'
+  }
+
+  if (normalized.includes('user already registered')) {
+    return 'Usuário já cadastrado. Faça login.'
+  }
+
+  return message
+}
+
+async function buildUserProfile(sessionUser) {
+  if (!supabase || !sessionUser) {
+    return null
+  }
+
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('id, full_name, email, role, organization_id, avatar_url, is_active')
+    .eq('id', sessionUser.id)
+    .maybeSingle()
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Erro ao carregar perfil do usuário:', error)
+  }
+
+  return {
+    id: sessionUser.id,
+    email: data?.email || sessionUser.email,
+    name:
+      data?.full_name ||
+      sessionUser.user_metadata?.full_name ||
+      sessionUser.email?.split('@')[0] ||
+      'Usuário',
+    role: data?.role || 'user',
+    organizationId: data?.organization_id || null,
+    avatarUrl: data?.avatar_url || null,
+    isActive: data?.is_active ?? true,
+  }
+}
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem(USER_KEY)
-    return saved ? JSON.parse(saved) : null
-  })
+  const [session, setSession] = useState(null)
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token)
-    } else {
-      localStorage.removeItem(TOKEN_KEY)
-    }
-  }, [token])
+    let isMounted = true
 
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem(USER_KEY, JSON.stringify(user))
-    } else {
-      localStorage.removeItem(USER_KEY)
+    const syncSession = async (nextSession) => {
+      if (!isMounted) {
+        return
+      }
+
+      setSession(nextSession)
+
+      if (!nextSession?.user) {
+        setUser(null)
+        setLoading(false)
+        return
+      }
+
+      const profile = await buildUserProfile(nextSession.user)
+
+      if (isMounted) {
+        setUser(profile)
+        setLoading(false)
+      }
     }
-  }, [user])
+
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false)
+      return undefined
+    }
+
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.error('Erro ao recuperar sessão:', error)
+      }
+
+      void syncSession(data.session)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      void syncSession(nextSession)
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   const login = async (email, password) => {
     if (!email || !password) {
       throw new Error('Informe email e senha.')
     }
 
-    const fakeToken = `session-${Date.now()}`
-    const profile = {
-      name: email.split('@')[0],
-      email,
+    if (!supabase) {
+      throw new Error('Configure o Supabase para habilitar o login.')
     }
 
-    setToken(fakeToken)
-    setUser(profile)
-    return profile
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+
+    if (error) {
+      throw new Error(formatAuthError(error))
+    }
+
+    return data
   }
 
-  const logout = () => {
-    setToken(null)
+  const register = async (fullName, email, password) => {
+    if (!fullName || !email || !password) {
+      throw new Error('Informe nome completo, email e senha.')
+    }
+
+    if (!supabase) {
+      throw new Error('Configure o Supabase para habilitar o cadastro.')
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo:
+          typeof window !== 'undefined'
+            ? `${window.location.origin}/email-confirmation`
+            : undefined,
+        data: {
+          full_name: fullName,
+        },
+      },
+    })
+
+    if (error) {
+      throw new Error(formatAuthError(error))
+    }
+
+    return data
+  }
+
+  const logout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut()
+    }
+
+    setSession(null)
     setUser(null)
   }
 
   const value = useMemo(
     () => ({
-      token,
+      session,
       user,
-      isAuthenticated: Boolean(token),
+      loading,
+      isConfigured: isSupabaseConfigured,
+      isAuthenticated: Boolean(session?.user),
       login,
+      register,
       logout,
     }),
-    [token, user],
+    [session, user, loading],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
