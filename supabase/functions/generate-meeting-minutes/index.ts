@@ -110,7 +110,7 @@ Não invente informações que não estejam na transcrição.`
 **Transcrição:**
 ${transcript}
 
-Redija a ata completa seguindo exatamente o formato e as instruções definidas no sistema.`
+IMPORTANTE: NÃO inclua um bloco de cabeçalho com Título, Tipo, Data ou Presentes na ata — esse bloco já é gerado automaticamente pelo sistema. Comece diretamente pela primeira seção do corpo da ata (ex.: ## Abertura). Siga exatamente o formato e as instruções definidas no sistema.`
 
     // Azure AI Foundry v1 API: endpoint já inclui /openai/v1, modelo vai no body
     const url = `${endpoint.replace(/\/$/, '')}/chat/completions`
@@ -516,6 +516,159 @@ function meetingTypeLabel(meetingType: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Trello
+// ---------------------------------------------------------------------------
+
+interface TrelloTask {
+    title: string
+    description: string
+    responsible: string
+    dueContext: string
+}
+
+interface TrelloCard {
+    id: string
+    url: string
+    name: string
+    responsible: string
+}
+
+/**
+ * Faz uma segunda chamada à OpenAI para extrair tarefas estruturadas da ata.
+ * Retorna um array com title, description, responsible e dueContext.
+ */
+async function extractTasksWithAI(
+    minutesContent: string,
+    meetingTitle: string,
+    meetingDate: string,
+    endpoint: string,
+    apiKey: string,
+    deployment: string,
+): Promise<TrelloTask[]> {
+    const prompt = `Analise a ata de reunião abaixo e identifique todas as tarefas, encaminhamentos e responsabilidades atribuídas.
+
+Para cada item encontrado, retorne um objeto JSON com os campos:
+- "title": título curto e direto (máximo 60 caracteres), começando com um verbo no infinitivo (ex: "Enviar relatório mensal")
+- "description": descrição detalhada explicando o que precisa ser feito, o contexto da decisão e o critério de conclusão
+- "responsible": nome do responsável (ou "Não definido" se não mencionado)
+- "dueContext": prazo ou referência temporal mencionada (ex: "próxima reunião", "até 30 de abril") ou "" se não houver
+
+Se não houver nenhuma tarefa, retorne um array vazio [].
+Retorne APENAS um array JSON válido, sem texto adicional, sem markdown, sem explicações.
+
+**Reunião:** ${meetingTitle} — ${meetingDate}
+
+**Ata:**
+${minutesContent}`
+
+    const url = `${endpoint.replace(/\/$/, '')}/chat/completions`
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+            model: deployment,
+            messages: [
+                { role: 'system', content: 'Você é um assistente especializado em extrair tarefas de atas de reunião. Responda sempre com JSON puro e válido.' },
+                { role: 'user', content: prompt },
+            ],
+            temperature: 0.1,
+            max_tokens: 2048,
+        }),
+    })
+
+    if (!response.ok) {
+        const details = await response.text()
+        console.warn(`Falha ao extrair tarefas com IA: ${details}`)
+        return []
+    }
+
+    const data: AzureOpenAIResponse = await response.json()
+    const content = data.choices?.[0]?.message?.content?.trim() || ''
+
+    try {
+        // Remove blocos de código markdown caso a IA os inclua mesmo sendo instruída a não
+        const clean = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+        const parsed = JSON.parse(clean)
+        return Array.isArray(parsed) ? parsed : []
+    } catch {
+        console.warn('Resposta de tarefas não é JSON válido:', content)
+        return []
+    }
+}
+
+/**
+ * Cria um card no Trello e retorna os dados do card criado.
+ */
+async function createTrelloCard(
+    listId: string,
+    task: TrelloTask,
+    apiKey: string,
+    token: string,
+    driveUrl: string,
+    meetingTitle: string,
+    meetingDate: string,
+): Promise<TrelloCard> {
+    const descParts = []
+    if (task.description) descParts.push(task.description)
+    descParts.push('')
+    descParts.push(`**Responsável:** ${task.responsible}`)
+    if (task.dueContext) descParts.push(`**Prazo:** ${task.dueContext}`)
+    descParts.push(`**Reunião:** ${meetingTitle}`)
+    descParts.push(`**Data:** ${meetingDate}`)
+    descParts.push(`**Ata:** ${driveUrl}`)
+    const desc = descParts.join('\n')
+
+    const url = new URL('https://api.trello.com/1/cards')
+    url.searchParams.set('idList', listId)
+    url.searchParams.set('key', apiKey)
+    url.searchParams.set('token', token)
+    url.searchParams.set('name', task.title)
+    url.searchParams.set('desc', desc)
+
+    const response = await fetch(url.toString(), { method: 'POST' })
+
+    if (!response.ok) {
+        const details = await response.text()
+        throw new Error(`Falha ao criar card Trello "${task.description}": ${details}`)
+    }
+
+    const card = await response.json()
+    return {
+        id: card.id,
+        url: card.shortUrl || card.url,
+        name: task.title,
+        responsible: task.responsible,
+    }
+}
+
+/**
+ * Cria cards no Trello para todas as tarefas identificadas na ata.
+ * Retorna os cards criados com sucesso; erros individuais são logados mas não lançados.
+ */
+async function createTrelloCards(
+    tasks: TrelloTask[],
+    listId: string,
+    apiKey: string,
+    token: string,
+    driveUrl: string,
+    meetingTitle: string,
+    meetingDate: string,
+): Promise<TrelloCard[]> {
+    const cards: TrelloCard[] = []
+
+    for (const task of tasks) {
+        try {
+            const card = await createTrelloCard(listId, task, apiKey, token, driveUrl, meetingTitle, meetingDate)
+            cards.push(card)
+        } catch (err) {
+            console.warn(`Aviso: ${err instanceof Error ? err.message : String(err)}`)
+        }
+    }
+
+    return cards
+}
+
+// ---------------------------------------------------------------------------
 // Handler principal
 // ---------------------------------------------------------------------------
 
@@ -571,16 +724,19 @@ Deno.serve(async (request: Request) => {
     }
 
     try {
-        // 1. Busca configurações da organização (pasta do Drive por tipo e prompt)
+        // 1. Busca configurações da organização (pasta do Drive por tipo, prompt e Trello)
         const { data: orgSettings } = await supabase
             .from('organization_settings')
-            .select('drive_root_folder_id, type_folder_map, minutes_prompt')
+            .select('drive_root_folder_id, type_folder_map, minutes_prompt, trello_api_key, trello_token, trello_list_map')
             .eq('organization_id', organizationId)
             .maybeSingle()
 
         const typeFolderMap: Record<string, string> = orgSettings?.type_folder_map || {}
         const rootFolderId: string | undefined = orgSettings?.drive_root_folder_id
         const customPrompt: string | undefined = orgSettings?.minutes_prompt || undefined
+        const trelloApiKey: string | undefined = orgSettings?.trello_api_key
+        const trelloToken: string | undefined = orgSettings?.trello_token
+        const trelloListMap: Record<string, string> = orgSettings?.trello_list_map || {}
 
         // 2. Obtém token Google
         const accessToken = await getGoogleAccessToken()
@@ -624,7 +780,43 @@ Deno.serve(async (request: Request) => {
         // 7. Torna o documento publicamente acessível (somente leitura)
         await setPublicReadPermission(documentId, accessToken)
 
-        // 6. Atualiza o registro no Supabase com status "ready"
+        // 8. Cria cards no Trello para as tarefas identificadas na ata
+        let trelloCards: TrelloCard[] = []
+        const trelloListId = trelloListMap[meetingType]
+
+        if (trelloApiKey && trelloToken && trelloListId) {
+            const endpoint = Deno.env.get('AZURE_OPENAI_ENDPOINT') || ''
+            const openAiKey = Deno.env.get('AZURE_OPENAI_API_KEY') || ''
+            const deployment = Deno.env.get('AZURE_OPENAI_DEPLOYMENT') || 'gpt-4.1-mini'
+
+            const tasks = await extractTasksWithAI(
+                minutesContent,
+                title,
+                formattedDate,
+                endpoint,
+                openAiKey,
+                deployment,
+            )
+
+            if (tasks.length > 0) {
+                trelloCards = await createTrelloCards(
+                    tasks,
+                    trelloListId,
+                    trelloApiKey,
+                    trelloToken,
+                    webViewLink,
+                    title,
+                    formattedDate,
+                )
+                console.log(`Trello: ${trelloCards.length}/${tasks.length} cards criados.`)
+            } else {
+                console.log('Nenhuma tarefa identificada pela IA.')
+            }
+        } else {
+            console.log('Trello não configurado para este tipo de reunião — cards ignorados.')
+        }
+
+        // 9. Atualiza o registro no Supabase com status "ready"
         const { error: updateError } = await supabase
             .from('meeting_minutes')
             .update({
@@ -632,6 +824,7 @@ Deno.serve(async (request: Request) => {
                 drive_file_url: webViewLink,
                 drive_folder_id: folderId || null,
                 summary: minutesContent.slice(0, 500), // resumo sem metadados
+                trello_cards: trelloCards,
                 generation_status: 'ready',
                 updated_at: new Date().toISOString(),
             })
@@ -646,6 +839,7 @@ Deno.serve(async (request: Request) => {
             success: true,
             documentId,
             webViewLink,
+            trelloCards,
         })
     } catch (err) {
         // Marca como "failed" para o frontend poder reagir

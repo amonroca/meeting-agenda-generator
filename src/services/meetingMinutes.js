@@ -149,3 +149,47 @@ export async function generateMeetingMinutes({
 
   return responseBody
 }
+
+/**
+ * Busca todas as tarefas das atas, enriquecidas com o status atual no Trello
+ * (nome da lista em que o card se encontra).
+ *
+ * @param {string} organizationId
+ * @returns {Promise<Array>}
+ */
+export async function getTrelloTasks(organizationId) {
+  if (!supabase || !supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Configure o Supabase para buscar tarefas.')
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession()
+  const accessToken = sessionData?.session?.access_token
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/get-trello-tasks`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ organizationId }),
+    },
+  )
+
+  let responseBody
+  try {
+    responseBody = await response.json()
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok) {
+    const message = responseBody?.error || `Erro ${response.status}: ${response.statusText}`
+    throw new Error(message)
+  }
+
+  return responseBody?.tasks ?? []
+}
+
