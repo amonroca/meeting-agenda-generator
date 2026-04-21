@@ -3,6 +3,8 @@ import AppLayout from './layouts/AppLayout'
 import ProtectedRoute from './routes/ProtectedRoute'
 import DashboardPage from './pages/DashboardPage'
 import MeetingsPage from './pages/MeetingsPage'
+import MinutesPage from './pages/MinutesPage'
+import InterviewsPage from './pages/InterviewsPage'
 import TasksPage from './pages/TasksPage'
 import SettingsPage from './pages/SettingsPage'
 import LoginPage from './pages/LoginPage'
@@ -46,6 +48,8 @@ export default function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/meetings" element={<MeetingsPage />} />
+          <Route path="/minutes" element={<MinutesPage />} />
+          <Route path="/interviews" element={<InterviewsPage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
