@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import EventNoteRoundedIcon from '@mui/icons-material/EventNoteRounded'
+import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
+import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded'
 import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded'
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
@@ -10,11 +12,10 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 function navItemClass(isActive) {
-  return `flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition ${
-    isActive
+  return `flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition ${isActive
       ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-  }`
+    }`
 }
 
 function Sidebar({ menuItems, user, onClose, onLogout }) {
@@ -81,6 +82,8 @@ export default function AppLayout() {
     () => [
       { label: 'Dashboard', path: '/dashboard', icon: DashboardRoundedIcon },
       { label: 'Reuniões', path: '/meetings', icon: EventNoteRoundedIcon },
+      { label: 'Atas', path: '/minutes', icon: DescriptionRoundedIcon },
+      { label: 'Entrevistas', path: '/interviews', icon: GroupsRoundedIcon },
       { label: 'Tarefas', path: '/tasks', icon: AssignmentTurnedInRoundedIcon },
       { label: 'Configurações', path: '/settings', icon: SettingsRoundedIcon },
     ],
@@ -125,7 +128,7 @@ export default function AppLayout() {
       )}
 
       <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-slate-200 bg-white lg:block">
-        <Sidebar menuItems={menuItems} user={user} onClose={() => {}} onLogout={handleLogout} />
+        <Sidebar menuItems={menuItems} user={user} onClose={() => { }} onLogout={handleLogout} />
       </aside>
 
       <main className="px-4 pb-6 pt-20 lg:ml-72 lg:px-8 lg:pt-8">
