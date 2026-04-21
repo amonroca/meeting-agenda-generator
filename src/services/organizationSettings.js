@@ -10,7 +10,7 @@ export async function getOrganizationSettings(organizationId) {
     const client = getSupabaseClient()
     const { data, error } = await client
         .from('organization_settings')
-        .select('drive_root_folder_id, type_folder_map, minutes_prompt')
+        .select('drive_root_folder_id, type_folder_map, minutes_prompt, trello_api_key, trello_token, trello_list_map')
         .eq('organization_id', organizationId)
         .maybeSingle()
 
@@ -23,7 +23,7 @@ export async function getOrganizationSettings(organizationId) {
  * @param {string} organizationId
  * @param {{ typeFolderMap: Record<string, string>, driveRootFolderId?: string }} settings
  */
-export async function saveOrganizationSettings(organizationId, { typeFolderMap, driveRootFolderId, minutesPrompt }) {
+export async function saveOrganizationSettings(organizationId, { typeFolderMap, driveRootFolderId, minutesPrompt, trelloApiKey, trelloToken, trelloListMap }) {
     if (!isSupabaseConfigured || !organizationId) {
         throw new Error('Supabase não configurado.')
     }
@@ -37,6 +37,9 @@ export async function saveOrganizationSettings(organizationId, { typeFolderMap, 
                 type_folder_map: typeFolderMap,
                 ...(driveRootFolderId !== undefined ? { drive_root_folder_id: driveRootFolderId || null } : {}),
                 ...(minutesPrompt !== undefined ? { minutes_prompt: minutesPrompt || null } : {}),
+                ...(trelloApiKey !== undefined ? { trello_api_key: trelloApiKey || null } : {}),
+                ...(trelloToken !== undefined ? { trello_token: trelloToken || null } : {}),
+                ...(trelloListMap !== undefined ? { trello_list_map: trelloListMap } : {}),
             },
             { onConflict: 'organization_id' },
         )

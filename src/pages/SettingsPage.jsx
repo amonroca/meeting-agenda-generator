@@ -59,6 +59,11 @@ export default function SettingsPage() {
   const [minutesPrompt, setMinutesPrompt] = useState(DEFAULT_MINUTES_PROMPT)
   const [promptSaving, setPromptSaving] = useState(false)
   const [promptMessage, setPromptMessage] = useState({ type: '', text: '' })
+  const [trelloApiKey, setTrelloApiKey] = useState('')
+  const [trelloToken, setTrelloToken] = useState('')
+  const [trelloListMap, setTrelloListMap] = useState({})
+  const [trelloSaving, setTrelloSaving] = useState(false)
+  const [trelloMessage, setTrelloMessage] = useState({ type: '', text: '' })
 
   useEffect(() => {
     if (!user?.organizationId) return
@@ -71,6 +76,9 @@ export default function SettingsPage() {
         if (settings?.minutes_prompt) {
           setMinutesPrompt(settings.minutes_prompt)
         }
+        if (settings?.trello_api_key) setTrelloApiKey(settings.trello_api_key)
+        if (settings?.trello_token) setTrelloToken(settings.trello_token)
+        if (settings?.trello_list_map) setTrelloListMap(settings.trello_list_map)
       })
       .catch(() => { })
   }, [user?.organizationId])
@@ -90,6 +98,29 @@ export default function SettingsPage() {
     } finally {
       setDriveSaving(false)
       setTimeout(() => setDriveMessage({ type: '', text: '' }), 5000)
+    }
+  }
+
+  async function handleSaveTrelloSettings(e) {
+    e.preventDefault()
+    if (!user?.organizationId) return
+
+    setTrelloSaving(true)
+    setTrelloMessage({ type: '', text: '' })
+
+    try {
+      await saveOrganizationSettings(user.organizationId, {
+        typeFolderMap: folderPaths,
+        trelloApiKey,
+        trelloToken,
+        trelloListMap,
+      })
+      setTrelloMessage({ type: 'success', text: 'Configurações do Trello salvas com sucesso.' })
+    } catch (err) {
+      setTrelloMessage({ type: 'error', text: err.message || 'Falha ao salvar configurações do Trello.' })
+    } finally {
+      setTrelloSaving(false)
+      setTimeout(() => setTrelloMessage({ type: '', text: '' }), 5000)
     }
   }
 
@@ -177,6 +208,98 @@ export default function SettingsPage() {
           <p>Você pode usar refresh token ou fluxo OAuth com usuário e senha, ambos protegidos no servidor.</p>
         </div>
       </div>
+      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-slate-900">Trello</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Tarefas identificadas nas atas serão criadas automaticamente como cards no Trello.
+            Gere sua chave e token em{' '}
+            <a
+              href="https://trello.com/app-key"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-blue-600 hover:underline"
+            >
+              trello.com/app-key
+            </a>.
+          </p>
+        </div>
+
+        <form onSubmit={handleSaveTrelloSettings} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">API Key</span>
+              <input
+                type="text"
+                value={trelloApiKey}
+                onChange={(e) => setTrelloApiKey(e.target.value)}
+                placeholder="Chave da API do Trello"
+                disabled={!isConfigured || trelloSaving}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:opacity-60"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Token</span>
+              <input
+                type="password"
+                value={trelloToken}
+                onChange={(e) => setTrelloToken(e.target.value)}
+                placeholder="Token de acesso do Trello"
+                disabled={!isConfigured || trelloSaving}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:opacity-60"
+              />
+            </label>
+          </div>
+
+          <div>
+            <p className="mb-3 text-sm font-medium text-slate-700">Lista do Trello por tipo de reunião</p>
+            <p className="mb-3 text-xs text-slate-500">
+              Cole o ID da lista (coluna) do Trello onde as tarefas de cada tipo de reunião serão criadas.
+              O ID aparece na URL ao abrir um cartão ou pode ser obtido via API.
+            </p>
+            <div className="space-y-3">
+              {Object.entries(MEETING_TYPE_LABELS).map(([type, label]) => (
+                <label key={type} className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
+                  <input
+                    type="text"
+                    value={trelloListMap[type] || ''}
+                    onChange={(e) =>
+                      setTrelloListMap((prev) => ({ ...prev, [type]: e.target.value }))
+                    }
+                    placeholder="ID da lista Trello (ex: 664abc123def456...)"
+                    disabled={!isConfigured || trelloSaving}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:opacity-60"
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {trelloMessage.text && (
+            <div
+              className={`rounded-2xl border px-4 py-3 text-sm ${trelloMessage.type === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-red-200 bg-red-50 text-red-700'
+                }`}
+            >
+              {trelloMessage.text}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={!isConfigured || !user?.organizationId || trelloSaving}
+              className="rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {trelloSaving ? 'Salvando…' : 'Salvar configurações Trello'}
+            </button>
+          </div>
+        </form>
+      </div>
+
       <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-slate-900">Pastas do Google Drive</h2>
