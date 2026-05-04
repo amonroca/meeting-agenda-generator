@@ -3,6 +3,7 @@ import GenerateMinutesModal from '../components/GenerateMinutesModal'
 import { useAuth } from '../hooks/useAuth'
 import { formatCalendarDate, isGoogleCalendarConfigured, listGoogleCalendarEvents } from '../services/googleCalendar'
 import { listMeetingMinutes, listMeetingTypeOptions } from '../services/meetingMinutes'
+import { getMeetingConfirmations, sendTelegramReminders } from '../services/telegram'
 
 const defaultMeetingTypeOptions = [
   { value: '', label: 'Todos os tipos' },
@@ -20,6 +21,41 @@ export default function MeetingsPage() {
   const [error, setError] = useState('')
   const [selectedMeeting, setSelectedMeeting] = useState(null)
   const [successMessage, setSuccessMessage] = useState('')
+
+  // Telegram: mapa de eventId → { sending, confirmations }
+  const [telegramState, setTelegramState] = useState({})
+
+  async function handleSendReminders(meeting) {
+    setTelegramState((prev) => ({ ...prev, [meeting.id]: { sending: true, confirmations: prev[meeting.id]?.confirmations } }))
+    try {
+      const result = await sendTelegramReminders({
+        organizationId: user.organizationId,
+        googleEventId: meeting.id,
+        title: meeting.title,
+        meetingAt: meeting.startAt,
+        meetingType: meeting.meetingType,
+        meetingTypeLabel: meeting.meetingTypeLabel,
+        location: meeting.location,
+      })
+      setSuccessMessage(`Lembretes enviados: ${result.sent} de ${result.total} destinatários com Telegram vinculado.${result.errors?.length ? ' Erros: ' + result.errors.join('; ') : ''}`)
+      setTimeout(() => setSuccessMessage(''), 6000)
+      // Carrega confirmações após envio
+      const confirmations = await getMeetingConfirmations(user.organizationId, meeting.id)
+      setTelegramState((prev) => ({ ...prev, [meeting.id]: { sending: false, confirmations } }))
+    } catch (err) {
+      setSuccessMessage('')
+      setTelegramState((prev) => ({ ...prev, [meeting.id]: { sending: false, confirmations: prev[meeting.id]?.confirmations } }))
+      alert(err.message || 'Erro ao enviar lembretes.')
+    }
+  }
+
+  async function loadConfirmations(meetingId) {
+    if (!user?.organizationId) return
+    try {
+      const confirmations = await getMeetingConfirmations(user.organizationId, meetingId)
+      setTelegramState((prev) => ({ ...prev, [meetingId]: { ...prev[meetingId], confirmations } }))
+    } catch { /* silencioso */ }
+  }
 
   useEffect(() => {
     listMeetingTypeOptions()
@@ -64,6 +100,19 @@ export default function MeetingsPage() {
 
       setCalendarMeetings(calendarEvents)
       setMeetingMinutes(minutes)
+
+      // Carrega confirmações de todas as reuniões do calendário
+      if (user?.organizationId && calendarEvents.length > 0) {
+        calendarEvents.forEach((meeting) => {
+          getMeetingConfirmations(user.organizationId, meeting.id)
+            .then((confirmations) => {
+              if (confirmations.length > 0) {
+                setTelegramState((prev) => ({ ...prev, [meeting.id]: { ...prev[meeting.id], confirmations } }))
+              }
+            })
+            .catch(() => { })
+        })
+      }
     } catch (err) {
       setError(err.message || 'Não foi possível carregar as reuniões.')
     } finally {
@@ -124,6 +173,11 @@ export default function MeetingsPage() {
 
     return items.map((meeting) => {
       const existingMinute = minuteByEventId[meeting.id]
+      const tState = telegramState[meeting.id]
+      const confirmations = tState?.confirmations || []
+      const confirmed = confirmations.filter((c) => c.status === 'confirmed').length
+      const declined = confirmations.filter((c) => c.status === 'declined').length
+      const isAdmin = user?.role === 'admin'
       return (
         <div key={meeting.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -137,28 +191,57 @@ export default function MeetingsPage() {
                   Descrição: {meeting.description}
                 </p>
               )}
+              {confirmations.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                    ✅ {confirmed} confirmado{confirmed !== 1 ? 's' : ''}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600 ring-1 ring-red-200">
+                    ❌ {declined} recusou{declined !== 1 ? 'ram' : ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => loadConfirmations(meeting.id)}
+                    className="text-xs text-blue-600 underline underline-offset-2 hover:text-blue-800"
+                  >
+                    Atualizar
+                  </button>
+                </div>
+              )}
             </div>
-            {isConfigured && (
-              existingMinute?.drive_file_url ? (
-                <a
-                  href={existingMinute.drive_file_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
-                >
-                  Abrir ata
-                </a>
-              ) : (
+            <div className="flex shrink-0 flex-col gap-2 md:items-end">
+              {isAdmin && (
                 <button
                   type="button"
-                  onClick={() => setSelectedMeeting(meeting)}
-                  title="Gerar ata desta reunião"
-                  className="shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-blue-300 hover:text-blue-700"
+                  onClick={() => handleSendReminders(meeting)}
+                  disabled={tState?.sending}
+                  className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-60"
                 >
-                  + Gerar ata
+                  {tState?.sending ? 'Enviando...' : '📨 Enviar lembretes'}
                 </button>
-              )
-            )}
+              )}
+              {isConfigured && (
+                existingMinute?.drive_file_url ? (
+                  <a
+                    href={existingMinute.drive_file_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                  >
+                    Abrir ata
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMeeting(meeting)}
+                    title="Gerar ata desta reunião"
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-blue-300 hover:text-blue-700"
+                  >
+                    + Gerar ata
+                  </button>
+                )
+              )}
+            </div>
           </div>
         </div>
       )
