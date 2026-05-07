@@ -3,3 +3,21 @@ verify_jwt = false
 
 [functions.generate-meeting-minutes]
 verify_jwt = false
+
+[functions.transcribe-audio]
+verify_jwt = false
+
+[functions.get-trello-board-lists]
+verify_jwt = false
+
+[functions.update-trello-card]
+verify_jwt = false
+
+[functions.delete-trello-card]
+verify_jwt = false
+
+[functions.send-task-notification]
+verify_jwt = false
+
+[functions.telegram-webhook]
+verify_jwt = false
