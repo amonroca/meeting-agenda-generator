@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { formatCalendarDate } from '../services/googleCalendar'
-import { getTrelloTasks } from '../services/meetingMinutes'
+import { getTrelloTasks, deleteTrelloCard } from '../services/meetingMinutes'
+import EditTaskModal from '../components/EditTaskModal'
 
 const MEETING_TYPE_OPTIONS = [
   { value: '', label: 'Todos os tipos' },
@@ -78,6 +79,22 @@ export default function TasksPage() {
   }, [tasks, filterStatus, filterType, filterStartDate, filterEndDate])
 
   const hasFilters = filterStatus || filterType || filterStartDate || filterEndDate
+
+  const [editingTask, setEditingTask] = useState(null)
+
+  function handleSaveTask(updatedTask) {
+    setTasks((prev) => prev.map((t) => t.id === updatedTask.id ? updatedTask : t))
+    setEditingTask(null)
+  }
+
+  function handleDeleteTask(taskId) {
+    setTasks((prev) => prev.filter((t) => t.id !== taskId))
+    setEditingTask(null)
+  }
+
+  function handleNotifyTask(taskId, newCount) {
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, notificationsCount: newCount } : t))
+  }
 
   return (
     <div className="space-y-6">
@@ -202,8 +219,18 @@ export default function TasksPage() {
                       <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-400 ring-1 ring-slate-200">
                         Sem status
                       </span>
+                    )}                    {/* Contador: dias em aberto */}
+                    {task.daysOpen != null && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200" title="Dias em aberto">
+                        ⏱ {task.daysOpen}d
+                      </span>
                     )}
-                  </div>
+                    {/* Contador: notificações enviadas */}
+                    {task.notificationsCount > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200" title="Notificações enviadas">
+                        📨 {task.notificationsCount}
+                      </span>
+                    )}                  </div>
                   {task.responsible && (
                     <p className="mt-1 text-sm text-slate-500">Responsável: {task.responsible}</p>
                   )}
@@ -214,20 +241,40 @@ export default function TasksPage() {
                     {task.meetingTypeLabel} · {formatCalendarDate(task.meetingAt)}
                   </p>
                 </div>
-                {task.url && (
-                  <a
-                    href={task.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="shrink-0 inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTask(task)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
-                    Ver no Trello
-                  </a>
-                )}
+                    Editar
+                  </button>
+                  {task.url && (
+                    <a
+                      href={task.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                    >
+                      Ver no Trello
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {editingTask && (
+        <EditTaskModal
+          task={editingTask}
+          organizationId={user.organizationId}
+          onClose={() => setEditingTask(null)}
+          onSave={handleSaveTask}
+          onDelete={handleDeleteTask}
+          onNotify={handleNotifyTask}
+        />
       )}
     </div>
   )

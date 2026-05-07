@@ -193,3 +193,236 @@ export async function getTrelloTasks(organizationId) {
   return responseBody?.tasks ?? []
 }
 
+/**
+ * Envia um arquivo de áudio para a Edge Function de transcrição (Whisper).
+ *
+ * @param {File} file  Arquivo de áudio (MP3, M4A, WAV, OGG, WEBM, FLAC). Máximo 25 MB.
+ * @returns {Promise<string>} Texto transcrito.
+ */
+export async function transcribeAudio(file) {
+  if (!supabase || !supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Configure o Supabase para transcrever áudios.')
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession()
+  const accessToken = sessionData?.session?.access_token
+
+  const formData = new FormData()
+  formData.append('audio', file, file.name)
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/transcribe-audio`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: supabaseAnonKey,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        // Não define Content-Type — o browser define automaticamente com o boundary correto
+      },
+      body: formData,
+    },
+  )
+
+  let responseBody
+  try {
+    responseBody = await response.json()
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok) {
+    const message = responseBody?.error || `Erro ${response.status}: ${response.statusText}`
+    throw new Error(message)
+  }
+
+  if (!responseBody?.transcript) {
+    throw new Error('A transcrição retornou vazia.')
+  }
+
+  return responseBody.transcript
+}
+
+/**
+ * Busca todas as listas abertas do board Trello ao qual um card pertence.
+ *
+ * @param {string} organizationId
+ * @param {string} cardId
+ * @returns {Promise<Array<{ id: string, name: string }>>}
+ */
+export async function getTrelloBoardLists(organizationId, cardId) {
+  if (!supabase || !supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Configure o Supabase para buscar as listas do Trello.')
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession()
+  const accessToken = sessionData?.session?.access_token
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/get-trello-board-lists`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ organizationId, cardId }),
+    },
+  )
+
+  let responseBody
+  try { responseBody = await response.json() } catch { responseBody = null }
+
+  if (!response.ok) {
+    throw new Error(responseBody?.error || `Erro ${response.status}: ${response.statusText}`)
+  }
+
+  return responseBody?.lists ?? []
+}
+
+/**
+ * Atualiza um card do Trello (título, descrição e/ou lista).
+ *
+ * @param {object} params
+ * @param {string} params.organizationId
+ * @param {string} params.cardId
+ * @param {string} [params.name]
+ * @param {string} [params.desc]
+ * @param {string} [params.idList]
+ * @returns {Promise<{ id, name, desc, idList, url }>}
+ */
+export async function updateTrelloCard({ organizationId, cardId, minuteId, name, responsible, desc, idList }) {
+  if (!supabase || !supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Configure o Supabase para atualizar tarefas.')
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession()
+  const accessToken = sessionData?.session?.access_token
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/update-trello-card`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ organizationId, cardId, minuteId, name, responsible, desc, idList }),
+    },
+  )
+
+  let responseBody
+  try { responseBody = await response.json() } catch { responseBody = null }
+
+  if (!response.ok) {
+    throw new Error(responseBody?.error || `Erro ${response.status}: ${response.statusText}`)
+  }
+
+  return responseBody
+}
+
+/**
+ * Remove um card do Trello e do array trello_cards da ata.
+ *
+ * @param {string} organizationId
+ * @param {string} cardId
+ * @param {string} minuteId
+ */
+export async function deleteTrelloCard({ organizationId, cardId, minuteId }) {
+  if (!supabase || !supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Configure o Supabase para remover tarefas.')
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession()
+  const accessToken = sessionData?.session?.access_token
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/delete-trello-card`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ organizationId, cardId, minuteId }),
+    },
+  )
+
+  let responseBody
+  try { responseBody = await response.json() } catch { responseBody = null }
+
+  if (!response.ok) {
+    throw new Error(responseBody?.error || `Erro ${response.status}: ${response.statusText}`)
+  }
+
+  return responseBody
+}
+
+/**
+ * Retorna todos os usuários com Telegram vinculado na organização
+ * (membros internos + contatos externos).
+ *
+ * @returns {Promise<Array<{ name: string, chatId: number, type: 'member' | 'external' }>>}
+ */
+export async function getTelegramUsers(organizationId) {
+  if (!supabase) throw new Error('Configure o Supabase.')
+
+  const [{ data: members, error: e1 }, { data: contacts, error: e2 }] = await Promise.all([
+    supabase
+      .from('user_profiles')
+      .select('full_name, telegram_chat_id')
+      .eq('organization_id', organizationId)
+      .not('telegram_chat_id', 'is', null),
+    supabase
+      .from('telegram_contacts')
+      .select('full_name, telegram_chat_id')
+      .eq('organization_id', organizationId)
+      .not('telegram_chat_id', 'is', null),
+  ])
+
+  if (e1 || e2) throw new Error('Erro ao carregar usuários com Telegram.')
+
+  return [
+    ...(members || []).map((m) => ({ name: m.full_name, chatId: m.telegram_chat_id, type: 'member' })),
+    ...(contacts || []).map((c) => ({ name: c.full_name, chatId: c.telegram_chat_id, type: 'external' })),
+  ].filter((u) => u.name && u.chatId)
+}
+
+/**
+ * Envia uma notificação Telegram.
+ * Aceita `recipientChatId` + `recipientName` (direto) ou `responsible` (lookup por nome).
+ *
+ * @returns {Promise<{ ok: boolean, notificationsCount: number }>}
+ */
+export async function sendTaskNotification({ organizationId, cardId, minuteId, cardName, meetingTitle, description, recipientChatId, recipientName, responsible }) {
+  if (!supabase || !supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Configure o Supabase para enviar notificações.')
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession()
+  const accessToken = sessionData?.session?.access_token
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/send-task-notification`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ organizationId, cardId, minuteId, cardName, meetingTitle, description, recipientChatId, recipientName, responsible }),
+    },
+  )
+
+  let responseBody
+  try { responseBody = await response.json() } catch { responseBody = null }
+
+  if (!response.ok) {
+    throw new Error(responseBody?.error || `Erro ${response.status}: ${response.statusText}`)
+  }
+
+  return responseBody
+}

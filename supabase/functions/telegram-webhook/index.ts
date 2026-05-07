@@ -100,6 +100,56 @@ Deno.serve(async (request: Request) => {
             return ok()
         }
 
+        // Verificar se há comentário pendente para este usuário (não comanda)
+        if (!text.startsWith('/')) {
+            const { data: commentReq } = await supabase
+                .from('telegram_comment_requests')
+                .select('id, card_id, card_name, organization_id')
+                .eq('telegram_chat_id', chatId)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+            if (commentReq) {
+                // Remove o pedido (seja qual for o resultado abaixo)
+                await supabase
+                    .from('telegram_comment_requests')
+                    .delete()
+                    .eq('id', commentReq.id)
+
+                const { data: orgSettings } = await supabase
+                    .from('organization_settings')
+                    .select('trello_api_key, trello_token')
+                    .eq('organization_id', commentReq.organization_id)
+                    .maybeSingle()
+
+                const trelloApiKey = (orgSettings as Record<string, string> | null)?.trello_api_key
+                const trelloToken = (orgSettings as Record<string, string> | null)?.trello_token
+
+                if (trelloApiKey && trelloToken) {
+                    const commentUrl = new URL(`https://api.trello.com/1/cards/${commentReq.card_id}/actions/comments`)
+                    commentUrl.searchParams.set('key', trelloApiKey)
+                    commentUrl.searchParams.set('token', trelloToken)
+                    const commentRes = await fetch(commentUrl.toString(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text }),
+                    })
+                    if (commentRes.ok) {
+                        await sendMessage(
+                            botToken, chatId,
+                            `✅ <b>Comentário adicionado!</b>\n\n💬 <i>${text}</i>\n\n📋 <b>${commentReq.card_name || 'Tarefa'}</b>`,
+                        )
+                    } else {
+                        await sendMessage(botToken, chatId, '⚠️ Não foi possível adicionar o comentário no Trello. Tente novamente.')
+                    }
+                } else {
+                    await sendMessage(botToken, chatId, '⚠️ Integração com o Trello não está configurada.')
+                }
+                return ok()
+            }
+        }
+
         // /start — gera código de vinculação para contatos externos
         if (text.startsWith('/start')) {
             // Gera código de 8 chars alfanumérico
@@ -194,6 +244,145 @@ Informe este código ao secretário da estaca para que ele possa cadastrá-lo e 
                     : `❌ Ausência registrada. Obrigado por avisar!`
 
                 await answerCallbackQuery(botToken, callbackQueryId, responseText)
+            }
+        }
+
+        // Formato: comment:{cardId}  — usuário quer adicionar comentário
+        if (data.startsWith('comment:')) {
+            const cardId = data.slice(8)
+
+            // Busca contexto pelo histórico de notificações
+            const { data: notif } = await supabase
+                .from('trello_card_notifications')
+                .select('minute_id, organization_id')
+                .eq('card_id', cardId)
+                .order('sent_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+            if (!notif) {
+                await answerCallbackQuery(botToken, callbackQueryId, '⚠️ Tarefa não encontrada.')
+                return ok()
+            }
+
+            // Busca nome do card na ata
+            const { data: minute } = await supabase
+                .from('meeting_minutes')
+                .select('trello_cards')
+                .eq('id', (notif as Record<string, string>).minute_id)
+                .maybeSingle()
+
+            const card = (minute?.trello_cards as Array<Record<string, unknown>> | null)?.find(
+                (c) => c.id === cardId,
+            )
+            const cardName = (card?.name as string) || 'Tarefa'
+
+            // Upsert: sobrescreve pedido anterior do mesmo chat_id
+            await supabase
+                .from('telegram_comment_requests')
+                .upsert(
+                    {
+                        telegram_chat_id: chatId,
+                        card_id: cardId,
+                        card_name: cardName,
+                        organization_id: (notif as Record<string, string>).organization_id,
+                    },
+                    { onConflict: 'telegram_chat_id' },
+                )
+
+            await answerCallbackQuery(botToken, callbackQueryId, '💬 Escreva seu comentário na próxima mensagem.')
+            await sendMessage(
+                botToken, chatId,
+                `💬 <b>Adicionar comentário</b>\n\nEscreva sua mensagem para a tarefa:\n<b>${cardName}</b>\n\n<i>Envie o texto a seguir e ele será adicionado ao Trello.</i>`,
+                { force_reply: true, selective: true },
+            )
+            return ok()
+        }
+
+        // Formato: task:{cardId}:{listId}  — atualização de status pelo responsável
+        if (data.startsWith('task:')) {
+            const parts = data.split(':')
+            if (parts.length === 3) {
+                const [, cardId, listId] = parts
+
+                // Busca minuteId e organizationId a partir do histórico de notificações
+                const { data: notif } = await supabase
+                    .from('trello_card_notifications')
+                    .select('minute_id, organization_id')
+                    .eq('card_id', cardId)
+                    .order('sent_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle()
+
+                if (!notif) {
+                    await answerCallbackQuery(botToken, callbackQueryId, '⚠️ Tarefa não encontrada.')
+                    return ok()
+                }
+
+                const { minute_id: minuteId, organization_id: organizationId } = notif as Record<string, string>
+
+                // Busca credenciais Trello
+                const { data: orgSettings } = await supabase
+                    .from('organization_settings')
+                    .select('trello_api_key, trello_token')
+                    .eq('organization_id', organizationId)
+                    .maybeSingle()
+
+                const trelloApiKey = (orgSettings as Record<string, string> | null)?.trello_api_key
+                const trelloToken = (orgSettings as Record<string, string> | null)?.trello_token
+
+                if (!trelloApiKey || !trelloToken) {
+                    await answerCallbackQuery(botToken, callbackQueryId, '⚠️ Integração Trello não configurada.')
+                    return ok()
+                }
+
+                // Atualiza o card no Trello
+                const trelloUrl = new URL(`https://api.trello.com/1/cards/${cardId}`)
+                trelloUrl.searchParams.set('key', trelloApiKey)
+                trelloUrl.searchParams.set('token', trelloToken)
+                const trelloRes = await fetch(trelloUrl.toString(), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idList: listId }),
+                })
+
+                if (!trelloRes.ok) {
+                    await answerCallbackQuery(botToken, callbackQueryId, '⚠️ Erro ao atualizar no Trello.')
+                    return ok()
+                }
+
+                const updatedCard = await trelloRes.json()
+                const listName: string = updatedCard?.list?.name || listId
+
+                // Atualiza statusListId no banco (trello_cards da ata)
+                const { data: minute } = await supabase
+                    .from('meeting_minutes')
+                    .select('trello_cards')
+                    .eq('id', minuteId)
+                    .maybeSingle()
+
+                if (minute?.trello_cards) {
+                    const updatedCards = (minute.trello_cards as Array<Record<string, unknown>>).map((c) =>
+                        c.id === cardId ? { ...c, idList: listId } : c
+                    )
+                    await supabase
+                        .from('meeting_minutes')
+                        .update({ trello_cards: updatedCards })
+                        .eq('id', minuteId)
+                }
+
+                // Busca nome da lista para o feedback
+                const listRes = await fetch(
+                    `https://api.trello.com/1/lists/${listId}?fields=name&key=${trelloApiKey}&token=${trelloToken}`,
+                )
+                const listData = listRes.ok ? await listRes.json() : null
+                const displayName = listData?.name || 'novo status'
+
+                await answerCallbackQuery(botToken, callbackQueryId, `✅ Status atualizado para "${displayName}"!`)
+                await sendMessage(
+                    botToken, chatId,
+                    `✅ <b>Status atualizado!</b>\n\n📋 Tarefa movida para: <b>${displayName}</b>`,
+                )
             }
         }
     }

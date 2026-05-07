@@ -148,10 +148,36 @@ Deno.serve(async (request: Request) => {
         return jsonResponse({ tasks: [] })
     }
 
+    // Busca contagem de notificações por card
+    const { data: notifications } = await supabase
+        .from('trello_card_notifications')
+        .select('card_id')
+        .eq('organization_id', organizationId)
+
+    const notifCountMap: Record<string, number> = {}
+    for (const n of notifications || []) {
+        notifCountMap[n.card_id] = (notifCountMap[n.card_id] || 0) + 1
+    }
+
+    function getDaysOpen(cardId: string): number {
+        try {
+            const unixSeconds = parseInt(cardId.substring(0, 8), 16)
+            return Math.floor((Date.now() - unixSeconds * 1000) / 86_400_000)
+        } catch {
+            return 0
+        }
+    }
+
     // Se não há credenciais Trello, retorna sem status
     if (!trelloApiKey || !trelloToken) {
         return jsonResponse({
-            tasks: tasks.map((t) => ({ ...t, status: null, statusListId: null })),
+            tasks: tasks.map((t) => ({
+                ...t,
+                status: null,
+                statusListId: null,
+                notificationsCount: notifCountMap[t.id] || 0,
+                daysOpen: getDaysOpen(t.id),
+            })),
         })
     }
 
@@ -195,6 +221,8 @@ Deno.serve(async (request: Request) => {
             description: cardDescMap[task.id] ?? '',
             status,
             statusListId: listId,
+            notificationsCount: notifCountMap[task.id] || 0,
+            daysOpen: getDaysOpen(task.id),
         }
     })
 

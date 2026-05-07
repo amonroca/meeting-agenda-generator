@@ -10,7 +10,7 @@ export async function getOrganizationSettings(organizationId) {
     const client = getSupabaseClient()
     const { data, error } = await client
         .from('organization_settings')
-        .select('drive_root_folder_id, type_folder_map, minutes_prompt, trello_api_key, trello_token, trello_list_map')
+        .select('drive_root_folder_id, type_folder_map, minutes_prompt, trello_api_key, trello_token, trello_list_map, trello_board_id')
         .eq('organization_id', organizationId)
         .maybeSingle()
 
