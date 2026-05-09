@@ -7,6 +7,9 @@ verify_jwt = false
 [functions.transcribe-audio]
 verify_jwt = false
 
+[functions.transcribe-audio-status]
+verify_jwt = false
+
 [functions.get-trello-board-lists]
 verify_jwt = false
 

@@ -194,9 +194,9 @@ export async function getTrelloTasks(organizationId) {
 }
 
 /**
- * Envia um arquivo de áudio para a Edge Function de transcrição (Whisper).
+ * Envia um arquivo de áudio para a Edge Function de transcrição.
  *
- * @param {File} file  Arquivo de áudio (MP3, M4A, WAV, OGG, WEBM, FLAC). Máximo 25 MB.
+ * @param {File} file  Arquivo de áudio (MP3, M4A, WAV, OGG, WEBM, FLAC). Máximo 200 MB.
  * @returns {Promise<string>} Texto transcrito.
  */
 export async function transcribeAudio(file) {

@@ -100,13 +100,18 @@ Não invente informações que não estejam na transcrição.`
 
     const systemPrompt = customPrompt || defaultSystemPrompt
 
+    const hasDiarization = /^Palestrante \d+:/m.test(transcript)
+    const diarizationNote = hasDiarization
+        ? `\nOBSERVAÇÃO SOBRE A TRANSCRIÇÃO: A transcrição foi gerada com diarização automática. Os rótulos "Palestrante 1:", "Palestrante 2:" etc. identificam locutor por locutor, mas os nomes reais não são conhecidos. Use esses rótulos para atribuir falas, propostas, decisões e tarefas às pessoas corretas na ata — mencionando "um dos presentes", "outro membro" ou, se possível, inferindo pelo contexto quem falou. Não inclua os rótulos numéricos literalmente na ata.\n`
+        : ''
+
     const userPrompt = `Gere uma ata formal para a seguinte reunião:
 
 **Título:** ${title}
 **Tipo:** ${meetingTypeLabel}
 **Data:** ${formattedDate}
 **Presentes:** ${attendeesList}
-
+${diarizationNote}
 **Transcrição:**
 ${transcript}
 

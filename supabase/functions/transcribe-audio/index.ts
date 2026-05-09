@@ -11,7 +11,7 @@ function jsonResponse(body: unknown, status = 200) {
     })
 }
 
-const MAX_FILE_SIZE = 200 * 1024 * 1024 // 200 MB (limite da API de transcrição rápida do Azure)
+const MAX_FILE_SIZE = 200 * 1024 * 1024 // 200 MB
 const SPEECH_API_VERSION = '2024-11-15'
 
 Deno.serve(async (request: Request) => {

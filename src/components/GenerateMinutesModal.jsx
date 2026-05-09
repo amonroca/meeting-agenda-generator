@@ -100,14 +100,14 @@ export default function GenerateMinutesModal({ meeting, organizationId, onClose,
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
             onClick={(e) => { if (e.target === e.currentTarget && !loading) onClose() }}
         >
-            <div className="w-full max-w-2xl rounded-3xl bg-white shadow-xl ring-1 ring-slate-200">
+            <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-200">
                 {/* Header */}
-                <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+                <div className="mb-4 flex items-start justify-between gap-4">
                     <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Gerar ata</h2>
+                        <h2 className="text-xl font-semibold text-slate-900">Gerar ata</h2>
                         <p className="mt-0.5 text-sm text-slate-500 line-clamp-1">{meeting.title}</p>
                     </div>
                     <button
@@ -124,7 +124,7 @@ export default function GenerateMinutesModal({ meeting, organizationId, onClose,
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-5 px-6 py-5">
+                <form onSubmit={handleSubmit} className="space-y-5">
 
                     {/* Áudio */}
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
@@ -139,13 +139,13 @@ export default function GenerateMinutesModal({ meeting, organizationId, onClose,
                                 accept={ACCEPTED_AUDIO_TYPES}
                                 onChange={handleAudioChange}
                                 disabled={loading || transcribing}
-                                className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-600 hover:file:bg-slate-200 disabled:opacity-60"
+                                className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-600 hover:file:bg-slate-200 disabled:opacity-60"
                             />
                             <button
                                 type="button"
                                 onClick={handleTranscribe}
                                 disabled={!audioFile || transcribing || loading}
-                                className="shrink-0 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="shrink-0 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {transcribing ? 'Transcrevendo…' : 'Transcrever'}
                             </button>
@@ -154,7 +154,7 @@ export default function GenerateMinutesModal({ meeting, organizationId, onClose,
                             <p className="mt-2 text-xs text-red-600">{audioError}</p>
                         )}
                         {transcribing && (
-                            <p className="mt-2 text-xs text-slate-500">Aguarde — o Whisper está processando o áudio…</p>
+                            <p className="mt-2 text-xs text-slate-500">Aguarde — processando o áudio…</p>
                         )}
                     </div>
 
@@ -196,19 +196,19 @@ export default function GenerateMinutesModal({ meeting, organizationId, onClose,
                         </div>
                     )}
 
-                    <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+                    <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
                         <button
                             type="button"
                             onClick={onClose}
                             disabled={loading || transcribing}
-                            className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={loading || transcribing || transcript.trim().length < MIN_TRANSCRIPT_LENGTH}
-                            className="rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {loading ? 'Gerando ata…' : 'Gerar ata'}
                         </button>
