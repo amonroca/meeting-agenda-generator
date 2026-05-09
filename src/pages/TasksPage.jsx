@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/useAuth'
 import { formatCalendarDate } from '../services/googleCalendar'
 import { getTrelloTasks, deleteTrelloCard } from '../services/meetingMinutes'
 import EditTaskModal from '../components/EditTaskModal'
+import ViewTaskModal from '../components/ViewTaskModal'
 
 const MEETING_TYPE_OPTIONS = [
   { value: '', label: 'Todos os tipos' },
@@ -78,9 +79,8 @@ export default function TasksPage() {
     })
   }, [tasks, filterStatus, filterType, filterStartDate, filterEndDate])
 
-  const hasFilters = filterStatus || filterType || filterStartDate || filterEndDate
-
   const [editingTask, setEditingTask] = useState(null)
+  const [viewingTask, setViewingTask] = useState(null)
 
   function handleSaveTask(updatedTask) {
     setTasks((prev) => prev.map((t) => t.id === updatedTask.id ? updatedTask : t))
@@ -89,7 +89,7 @@ export default function TasksPage() {
 
   function handleDeleteTask(taskId) {
     setTasks((prev) => prev.filter((t) => t.id !== taskId))
-    setEditingTask(null)
+    setViewingTask(null)
   }
 
   function handleNotifyTask(taskId, newCount) {
@@ -98,26 +98,16 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Tarefas</h1>
-          <p className="mt-2 text-slate-600">
-            Sincronizadas em tempo real com o Trello.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={loadTasks}
-          disabled={loading}
-          className="shrink-0 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
-        >
-          {loading ? 'Atualizando...' : 'Atualizar'}
-        </button>
+      <div className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-500 px-6 py-6 shadow-lg">
+        <h1 className="text-2xl font-bold text-white">Tarefas</h1>
+        <p className="mt-1 text-sm text-blue-100">
+          Sincronizadas em tempo real com o Trello.
+        </p>
       </div>
 
       {/* Filtros */}
-      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="rounded-lg bg-white p-4 shadow-md">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,180px)_2fr_minmax(0,150px)_minmax(0,150px)_auto] lg:items-end">
           {/* Status */}
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-500">Status (lista Trello)</label>
@@ -134,7 +124,7 @@ export default function TasksPage() {
           </div>
 
           {/* Tipo de reunião */}
-          <div className="lg:col-span-2">
+          <div>
             <label className="mb-1 block text-xs font-semibold text-slate-500">Tipo de reunião</label>
             <select
               value={filterType}
@@ -168,10 +158,17 @@ export default function TasksPage() {
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400"
             />
           </div>
-        </div>
 
-        {hasFilters && (
-          <div className="mt-3 flex justify-end">
+          {/* Ações */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={loadTasks}
+              disabled={loading}
+              className="rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? 'Atualizando...' : 'Atualizar'}
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -180,25 +177,31 @@ export default function TasksPage() {
                 setFilterStartDate('')
                 setFilterEndDate('')
               }}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              Limpar filtros
+              Limpar
             </button>
           </div>
-        )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="inline-flex w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+          {loading ? 'Carregando...' : `${filteredTasks.length} tarefa(s)`}
+        </span>
       </div>
 
       {/* Lista */}
       {loading ? (
-        <div className="rounded-3xl bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-lg bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-md">
           Sincronizando com o Trello...
         </div>
       ) : error ? (
-        <div className="rounded-3xl bg-red-50 px-4 py-6 text-center text-sm text-red-700 ring-1 ring-red-200">
+        <div className="rounded-lg bg-red-50 px-4 py-6 text-center text-sm text-red-700 border border-red-200">
           {error}
         </div>
       ) : filteredTasks.length === 0 ? (
-        <div className="rounded-3xl bg-white px-4 py-12 text-center text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-lg bg-white px-4 py-12 text-center text-sm text-slate-600 shadow-md">
           {tasks.length === 0
             ? 'Nenhuma tarefa encontrada. As tarefas aparecem aqui quando atas com a seção ## Tarefas são geradas com o Trello configurado.'
             : 'Nenhuma tarefa corresponde aos filtros selecionados.'}
@@ -206,11 +209,11 @@ export default function TasksPage() {
       ) : (
         <div className="space-y-3">
           {filteredTasks.map((task) => (
-            <div key={`${task.minuteId}-${task.id}`} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <div key={`${task.minuteId}-${task.id}`} className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-base font-semibold text-slate-900">{task.name}</h2>
+                    <h2 className="text-lg font-semibold text-slate-900">{task.name}</h2>
                     {task.status ? (
                       <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${statusClasses(task.status)}`}>
                         {task.status}
@@ -244,6 +247,13 @@ export default function TasksPage() {
                 <div className="flex shrink-0 flex-wrap gap-2">
                   <button
                     type="button"
+                    onClick={() => setViewingTask(task)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Detalhes
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setEditingTask(task)}
                     className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
@@ -266,14 +276,22 @@ export default function TasksPage() {
         </div>
       )}
 
+      {viewingTask && (
+        <ViewTaskModal
+          task={viewingTask}
+          organizationId={user.organizationId}
+          onClose={() => setViewingTask(null)}
+          onDelete={handleDeleteTask}
+          onNotify={handleNotifyTask}
+        />
+      )}
+
       {editingTask && (
         <EditTaskModal
           task={editingTask}
           organizationId={user.organizationId}
           onClose={() => setEditingTask(null)}
           onSave={handleSaveTask}
-          onDelete={handleDeleteTask}
-          onNotify={handleNotifyTask}
         />
       )}
     </div>

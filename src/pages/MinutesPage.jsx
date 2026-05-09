@@ -89,9 +89,9 @@ export default function MinutesPage() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold text-slate-900">Atas</h1>
-                <p className="mt-2 text-slate-600">
+            <div className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-500 px-6 py-6 shadow-lg">
+                <h1 className="text-2xl font-bold text-white">Atas</h1>
+                <p className="mt-1 text-sm text-blue-100">
                     Atas de reuniões geradas e salvas no Google Drive.
                 </p>
             </div>
@@ -109,7 +109,7 @@ export default function MinutesPage() {
             )}
 
             {/* Filtros */}
-            <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <div className="rounded-lg bg-white p-4 shadow-md">
                 <div className="grid gap-4 lg:grid-cols-[1fr_minmax(0,160px)_minmax(0,160px)_auto] lg:items-end">
                     <label className="block">
                         <span className="mb-1.5 block text-sm font-medium text-slate-700">Tipo de reunião</span>
@@ -166,13 +166,19 @@ export default function MinutesPage() {
                 </div>
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="inline-flex w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                    {loading ? 'Carregando...' : `${minutes.length} ata(s)`}
+                </span>
+            </div>
+
             {/* Lista de atas */}
             {loading ? (
-                <div className="rounded-3xl bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">
+                <div className="rounded-lg bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-md">
                     Carregando atas...
                 </div>
             ) : minutes.length === 0 ? (
-                <div className="rounded-3xl bg-white px-4 py-12 text-center text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
+                <div className="rounded-lg bg-white px-4 py-12 text-center text-sm text-slate-600 shadow-md">
                     Nenhuma ata encontrada para os filtros selecionados.
                 </div>
             ) : (
@@ -180,7 +186,7 @@ export default function MinutesPage() {
                     {minutes.map((minute) => {
                         const attendees = formatAttendees(minute.attendees)
                         return (
-                            <div key={minute.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                            <div key={minute.id} className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
                                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                                     <div className="min-w-0 flex-1">
                                         <h3 className="truncate text-lg font-semibold text-slate-900">{minute.title}</h3>

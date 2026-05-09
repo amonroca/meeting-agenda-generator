@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import GenerateMinutesModal from '../components/GenerateMinutesModal'
+import ScheduleMeetingModal from '../components/ScheduleMeetingModal'
 import { useAuth } from '../hooks/useAuth'
-import { formatCalendarDate, isGoogleCalendarConfigured, listGoogleCalendarEvents } from '../services/googleCalendar'
+import { createGoogleCalendarEvent, formatCalendarDate, isGoogleCalendarConfigured, listGoogleCalendarEvents } from '../services/googleCalendar'
 import { listMeetingMinutes, listMeetingTypeOptions } from '../services/meetingMinutes'
 import { getMeetingConfirmations, sendTelegramReminders } from '../services/telegram'
 
 const defaultMeetingTypeOptions = [
   { value: '', label: 'Todos os tipos' },
 ]
+
+function cleanTitle(title) {
+  return (title || '').replace(/ - Carapicuiba Brazil Stake Atividades$/i, '').trim()
+}
 
 export default function MeetingsPage() {
   const { isConfigured, user } = useAuth()
@@ -21,11 +26,17 @@ export default function MeetingsPage() {
   const [error, setError] = useState('')
   const [selectedMeeting, setSelectedMeeting] = useState(null)
   const [successMessage, setSuccessMessage] = useState('')
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
 
   // Telegram: mapa de eventId → { sending, confirmations }
   const [telegramState, setTelegramState] = useState({})
 
   async function handleSendReminders(meeting) {
+    // Bloqueia envio para reuniões passadas
+    const meetingDate = new Date(meeting.meeting_at ?? meeting.startAt)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (meetingDate < today) return
     setTelegramState((prev) => ({ ...prev, [meeting.id]: { sending: true, confirmations: prev[meeting.id]?.confirmations } }))
     try {
       const result = await sendTelegramReminders({
@@ -130,6 +141,14 @@ export default function MeetingsPage() {
     setMeetingType('')
   }
 
+  async function handleScheduleMeeting(payload) {
+    await createGoogleCalendarEvent({ calendarId: 'primary', ...payload })
+    setShowScheduleModal(false)
+    setSuccessMessage('Reunião agendada com sucesso no Google Calendar!')
+    setTimeout(() => setSuccessMessage(''), 6000)
+    void loadMeetings()
+  }
+
   const handleMinutesSuccess = (result) => {
     setSelectedMeeting(null)
     setSuccessMessage('Ata gerada com sucesso! O documento foi salvo no Google Drive.')
@@ -157,7 +176,7 @@ export default function MeetingsPage() {
   const renderMeetingCards = (items, emptyMessage) => {
     if (loading) {
       return (
-        <div className="rounded-3xl bg-white px-4 py-10 text-center text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-lg border-l-4 border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 shadow-sm">
           Carregando reuniões...
         </div>
       )
@@ -165,7 +184,7 @@ export default function MeetingsPage() {
 
     if (items.length === 0) {
       return (
-        <div className="rounded-3xl bg-white px-4 py-10 text-center text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-lg border-l-4 border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-600 shadow-sm">
           {emptyMessage}
         </div>
       )
@@ -179,10 +198,10 @@ export default function MeetingsPage() {
       const declined = confirmations.filter((c) => c.status === 'declined').length
       const isAdmin = user?.role === 'admin'
       return (
-        <div key={meeting.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div key={meeting.id} className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">{meeting.title}</h3>
+              <h3 className="text-lg font-semibold text-slate-900">{cleanTitle(meeting.title)}</h3>
               <p className="mt-1 text-sm text-slate-500">{meeting.meetingTypeLabel}</p>
               <p className="mt-1 text-sm text-slate-500">Data: {formatCalendarDate(meeting.startAt, meeting.isAllDay)}</p>
               {meeting.location && <p className="mt-1 text-sm text-slate-500">Local: {meeting.location}</p>}
@@ -210,16 +229,22 @@ export default function MeetingsPage() {
               )}
             </div>
             <div className="flex shrink-0 flex-col gap-2 md:items-end">
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => handleSendReminders(meeting)}
-                  disabled={tState?.sending}
-                  className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-60"
-                >
-                  {tState?.sending ? 'Enviando...' : '📨 Enviar lembretes'}
-                </button>
-              )}
+              {isAdmin && (() => {
+                const meetingDate = new Date(meeting.meeting_at ?? meeting.startAt)
+                const today = new Date(); today.setHours(0, 0, 0, 0)
+                const isPast = meetingDate < today
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleSendReminders(meeting)}
+                    disabled={tState?.sending || isPast}
+                    title={isPast ? 'Não é possível enviar lembretes para reuniões passadas' : undefined}
+                    className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {tState?.sending ? 'Enviando...' : '📨 Enviar lembretes'}
+                  </button>
+                )
+              })()}
               {isConfigured && (
                 existingMinute?.drive_file_url ? (
                   <a
@@ -250,10 +275,10 @@ export default function MeetingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Reuniões</h1>
-        <p className="mt-2 text-slate-600">
-          Eventos vêm do Google Calendar e as atas continuam disponíveis a partir dos registros do sistema.
+      <div className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-500 px-6 py-6 shadow-lg">
+        <h1 className="text-2xl font-bold text-white">Reuniões</h1>
+        <p className="mt-1 text-sm text-blue-100">
+          Agende, pesquise e acompanhe suas reuniões de forma eficiente.
         </p>
       </div>
 
@@ -275,7 +300,7 @@ export default function MeetingsPage() {
         </div>
       )}
 
-      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="rounded-lg bg-white p-4 shadow-md">
         <div className="grid gap-4 lg:grid-cols-[1fr_minmax(0,160px)_minmax(0,160px)_auto] lg:items-end">
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-700">Tipo de reunião</span>
@@ -332,9 +357,24 @@ export default function MeetingsPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="inline-flex w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+          {loading ? 'Carregando...' : `${regularMeetings.length} reunião(es)`}
+        </span>
+        {isGoogleCalendarConfigured && (
+          <button
+            type="button"
+            onClick={() => setShowScheduleModal(true)}
+            className="rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            Agendar nova reunião
+          </button>
+        )}
+      </div>
+
       <div className="space-y-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Próximos eventos do Google Calendar</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Próximas reuniões agendadas</h2>
           <p className="text-sm text-slate-500">Agenda oficial sincronizada do calendário.</p>
         </div>
 
@@ -347,6 +387,14 @@ export default function MeetingsPage() {
           organizationId={user?.organizationId}
           onClose={() => setSelectedMeeting(null)}
           onSuccess={handleMinutesSuccess}
+        />
+      )}
+
+      {showScheduleModal && (
+        <ScheduleMeetingModal
+          meetingTypeOptions={meetingTypeOptions}
+          onClose={() => setShowScheduleModal(false)}
+          onSuccess={handleScheduleMeeting}
         />
       )}
     </div>
