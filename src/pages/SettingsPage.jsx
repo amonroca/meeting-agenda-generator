@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { isGoogleCalendarConfigured } from '../services/googleCalendar'
 import { getOrganizationSettings, saveOrganizationSettings } from '../services/organizationSettings'
-import { generateTelegramLinkToken, getTelegramStatus, unlinkTelegram, listTelegramContacts, addTelegramContact, removeTelegramContact } from '../services/telegram'
+import { generateTelegramLinkToken, getTelegramStatus, unlinkTelegram, listTelegramContacts, addTelegramContact, removeTelegramContact, listOrgUsers, updateUserNotificationTypes } from '../services/telegram'
 import { listMeetingTypeOptions } from '../services/meetingMinutes'
 
 const TABS = [
   { id: 'perfil', label: 'Perfil', adminOnly: false },
+  { id: 'usuarios', label: 'Usuários', adminOnly: true },
   { id: 'contatos', label: 'Contatos Externos', adminOnly: true },
   { id: 'drive', label: 'Google Drive', adminOnly: true },
   { id: 'trello', label: 'Trello', adminOnly: true },
@@ -93,6 +94,11 @@ export default function SettingsPage() {
   const [contactMessage, setContactMessage] = useState({ type: '', text: '' })
   const [meetingTypeOptions, setMeetingTypeOptions] = useState([])
 
+  // Usuários internos
+  const [orgUsers, setOrgUsers] = useState([])
+  const [orgUsersLoading, setOrgUsersLoading] = useState(false)
+  const [savingUserId, setSavingUserId] = useState(null)
+
   useEffect(() => {
     listMeetingTypeOptions().then(setMeetingTypeOptions)
   }, [])
@@ -116,6 +122,31 @@ export default function SettingsPage() {
       .catch(() => { })
       .finally(() => setContactsLoading(false))
   }, [isAdmin, user?.organizationId, activeTab])
+
+  // Carrega usuários internos ao entrar na aba
+  useEffect(() => {
+    if (!isAdmin || !user?.organizationId || activeTab !== 'usuarios') return
+    setOrgUsersLoading(true)
+    listOrgUsers(user.organizationId)
+      .then(setOrgUsers)
+      .catch(() => { })
+      .finally(() => setOrgUsersLoading(false))
+  }, [isAdmin, user?.organizationId, activeTab])
+
+  async function handleToggleUserMeetingType(userId, currentTypes, typeValue) {
+    const next = currentTypes.includes(typeValue)
+      ? currentTypes.filter((t) => t !== typeValue)
+      : [...currentTypes, typeValue]
+    setSavingUserId(userId)
+    try {
+      await updateUserNotificationTypes(userId, next)
+      setOrgUsers((prev) => prev.map((u) => u.id === userId ? { ...u, notification_meeting_types: next } : u))
+    } catch (err) {
+      alert(err.message || 'Falha ao salvar.')
+    } finally {
+      setSavingUserId(null)
+    }
+  }
 
   async function handleAddContact(e) {
     e.preventDefault()
@@ -276,14 +307,9 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        {isAdmin && (
-          <div className="mb-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-            Conta e integrações
-          </div>
-        )}
-        <h1 className="text-3xl font-bold text-slate-900">Configurações</h1>
-        <p className="mt-2 text-slate-600">{isAdmin ? 'Gerencie seu perfil, o acesso ao banco e as integrações externas.' : 'Gerencie seu perfil e acesso ao sistema.'}</p>
+      <div className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-500 px-6 py-6 shadow-lg">
+        <h1 className="text-2xl font-bold text-white">Configurações</h1>
+        <p className="mt-1 text-sm text-blue-100">{isAdmin ? 'Gerencie seu perfil, o acesso ao banco e as integrações externas.' : 'Gerencie seu perfil e acesso ao sistema.'}</p>
       </div>
 
       {/* Abas — só exibe quando há mais de uma */}
@@ -314,7 +340,7 @@ export default function SettingsPage() {
       {/* Aba: Perfil */}
       {activeTab === 'perfil' && (
         <div className="space-y-4">
-          <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-lg font-bold text-white">
                 {(user?.name || 'U').charAt(0).toUpperCase()}
@@ -345,7 +371,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Telegram */}
-          <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Telegram</h2>
@@ -409,7 +435,7 @@ export default function SettingsPage() {
           </div>
 
           {isAdmin && (
-            <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <div className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Google Calendar</h2>
@@ -438,7 +464,7 @@ export default function SettingsPage() {
 
       {/* Aba: Google Drive */}
       {activeTab === 'drive' && isAdmin && (
-        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900">Pastas do Google Drive</h2>
             <p className="mt-0.5 text-sm text-slate-500">
@@ -513,7 +539,7 @@ export default function SettingsPage() {
 
       {/* Aba: Trello */}
       {activeTab === 'trello' && isAdmin && (
-        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900">Trello</h2>
             <p className="mt-0.5 text-sm text-slate-500">
@@ -632,9 +658,63 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Aba: Usuários */}
+      {activeTab === 'usuarios' && isAdmin && (
+        <div className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-slate-900">Usuários</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Defina quais tipos de reunião cada usuário deve receber notificações. Sem seleção = recebe todos os tipos.
+            </p>
+          </div>
+
+          {orgUsersLoading ? (
+            <p className="py-6 text-center text-sm text-slate-400">Carregando…</p>
+          ) : orgUsers.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-400">Nenhum usuário encontrado.</p>
+          ) : (
+            <ul className="space-y-3">
+              {orgUsers.map((u) => {
+                const types = u.notification_meeting_types || []
+                const isSaving = savingUserId === u.id
+                return (
+                  <li key={u.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-medium text-slate-900">{u.full_name}</span>
+                      <span className="text-xs text-slate-400">{u.email}</span>
+                      {u.telegram_chat_id ? (
+                        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">✓ Telegram</span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-500">Sem Telegram</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {meetingTypeOptions.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => handleToggleUserMeetingType(u.id, types, opt.value)}
+                          className={`rounded-full border px-3 py-1 text-xs font-medium transition disabled:opacity-50 ${types.includes(opt.value) ? 'border-blue-500 bg-blue-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300'}`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                      {types.length === 0 && (
+                        <span className="text-xs text-slate-400 italic self-center">Todos os tipos (padrão)</span>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Aba: Contatos Externos */}
       {activeTab === 'contatos' && isAdmin && (
-        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Contatos Externos</h2>
@@ -783,7 +863,7 @@ export default function SettingsPage() {
 
       {/* Aba: Prompt de IA */}
       {activeTab === 'prompt' && isAdmin && (
-        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900">Prompt de Geração de Atas</h2>
             <p className="mt-0.5 text-sm text-slate-500">

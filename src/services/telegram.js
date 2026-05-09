@@ -165,3 +165,36 @@ export async function removeTelegramContact(contactId) {
 
     if (error) throw error
 }
+
+/**
+ * Lista os usuários internos da organização com seus tipos de notificação.
+ */
+export async function listOrgUsers(organizationId) {
+    if (!isSupabaseConfigured || !organizationId) return []
+
+    const client = getSupabaseClient()
+    const { data, error } = await client
+        .from('user_profiles')
+        .select('id, full_name, email, role, telegram_chat_id, notification_meeting_types')
+        .eq('organization_id', organizationId)
+        .eq('is_active', true)
+        .order('full_name')
+
+    if (error) throw error
+    return data || []
+}
+
+/**
+ * Atualiza os tipos de reunião para notificação de um usuário.
+ */
+export async function updateUserNotificationTypes(userId, meetingTypes) {
+    if (!isSupabaseConfigured || !userId) throw new Error('Supabase não configurado.')
+
+    const client = getSupabaseClient()
+    const { error } = await client
+        .from('user_profiles')
+        .update({ notification_meeting_types: meetingTypes })
+        .eq('id', userId)
+
+    if (error) throw error
+}

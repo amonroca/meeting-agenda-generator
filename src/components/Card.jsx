@@ -1,6 +1,6 @@
 export default function Card({ children, className = '', ...props }) {
   return (
-    <div className={`rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 ${className}`} {...props}>
+    <div className={`rounded-lg bg-white p-4 shadow-md transition hover:shadow-lg ${className}`} {...props}>
       {children}
     </div>
   )

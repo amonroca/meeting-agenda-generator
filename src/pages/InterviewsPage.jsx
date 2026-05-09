@@ -311,13 +311,11 @@ export default function InterviewsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-                <div className="max-w-2xl">
-                    <h1 className="text-3xl font-bold text-slate-900">Entrevistas</h1>
-                    <p className="mt-2 text-slate-600">
-                        Agende, filtre e acompanhe entrevistas da Presidência da Estaca em um só lugar.
-                    </p>
-                </div>
+            <div className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-500 px-6 py-6 shadow-lg">
+                <h1 className="text-2xl font-bold text-white">Entrevistas</h1>
+                <p className="mt-1 text-sm text-blue-100">
+                    Agende, filtre e acompanhe entrevistas da Presidência da Estaca em um só lugar.
+                </p>
             </div>
 
             {!isGoogleCalendarConfigured && (
@@ -332,7 +330,7 @@ export default function InterviewsPage() {
                 </div>
             )}
 
-            <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <div className="rounded-lg bg-white p-4 shadow-md">
                 <div className="grid gap-4 xl:grid-cols-[180px_1fr_auto] xl:items-end xl:justify-between">
                     <label className="block">
                         <span className="mb-1.5 block text-sm font-medium text-slate-700">Filtrar por data</span>
@@ -394,19 +392,17 @@ export default function InterviewsPage() {
             </div>
 
             <div className="space-y-3">
-                <div className="flex flex-col gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Próximas entrevistas</h2>
-                        <p className="text-sm text-slate-500">Compromissos sincronizados com o calendário principal.</p>
-                    </div>
+                <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Próximas entrevistas</h2>
+                    <p className="text-sm text-slate-500">Compromissos sincronizados com o calendário principal.</p>
                 </div>
 
                 {loading ? (
-                    <div className="rounded-3xl bg-white px-4 py-10 text-center text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">
+                    <div className="rounded-lg bg-white px-4 py-10 text-center text-sm text-slate-500 shadow-md">
                         Carregando entrevistas...
                     </div>
                 ) : interviews.length === 0 ? (
-                    <div className="rounded-3xl bg-white px-4 py-10 text-center text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
+                    <div className="rounded-lg bg-white px-4 py-10 text-center text-sm text-slate-600 shadow-md">
                         Nenhuma entrevista encontrada para os filtros selecionados.
                     </div>
                 ) : (
@@ -418,7 +414,7 @@ export default function InterviewsPage() {
                         )
 
                         return (
-                            <div key={meeting.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                            <div key={meeting.id} className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm transition hover:shadow-md">
                                 <div className="flex flex-col gap-4">
                                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                         <div>

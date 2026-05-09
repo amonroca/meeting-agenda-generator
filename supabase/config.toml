@@ -10,6 +10,9 @@ verify_jwt = false
 [functions.get-trello-board-lists]
 verify_jwt = false
 
+[functions.get-trello-tasks]
+verify_jwt = false
+
 [functions.update-trello-card]
 verify_jwt = false
 
@@ -17,6 +20,12 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.send-task-notification]
+verify_jwt = false
+
+[functions.send-telegram-reminders]
+verify_jwt = false
+
+[functions.send-scheduled-reminders]
 verify_jwt = false
 
 [functions.telegram-webhook]

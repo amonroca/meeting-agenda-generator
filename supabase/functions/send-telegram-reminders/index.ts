@@ -23,6 +23,7 @@ interface ReminderPayload {
     meetingType?: string
     meetingTypeLabel?: string
     location?: string
+    reminderType?: '4days' | '1day' // '4days' (padrão) ou '1day' (lembrete do dia anterior)
 }
 
 async function sendMessage(botToken: string, chatId: number, text: string, replyMarkup: object): Promise<{ ok: boolean; error?: string }> {
@@ -40,6 +41,21 @@ async function sendMessage(botToken: string, chatId: number, text: string, reply
     if (!response.ok) {
         const errMsg = body?.description || `HTTP ${response.status}`
         console.warn(`Falha ao enviar mensagem para chat_id ${chatId}: ${errMsg}`)
+        return { ok: false, error: errMsg }
+    }
+    return { ok: true }
+}
+
+async function sendSimpleMessage(botToken: string, chatId: number, text: string): Promise<{ ok: boolean; error?: string }> {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    })
+    const body = await response.json().catch(() => ({}))
+    if (!response.ok) {
+        const errMsg = body?.description || `HTTP ${response.status}`
+        console.warn(`Falha ao enviar mensagem simples para chat_id ${chatId}: ${errMsg}`)
         return { ok: false, error: errMsg }
     }
     return { ok: true }
@@ -65,22 +81,28 @@ Deno.serve(async (request: Request) => {
         return jsonResponse({ error: 'Body inválido.' }, 400)
     }
 
-    const { organizationId, googleEventId, title, meetingAt, meetingType, meetingTypeLabel, location } = payload
+    const { organizationId, googleEventId, title, meetingAt, meetingType, meetingTypeLabel, location, reminderType } = payload
 
     if (!organizationId || !googleEventId || !title || !meetingAt) {
         return jsonResponse({ error: 'Campos obrigatórios: organizationId, googleEventId, title, meetingAt.' }, 400)
     }
 
     // Busca usuários internos com Telegram vinculado
-    const { data: users, error: usersError } = await supabase
+    const { data: usersRaw, error: usersError } = await supabase
         .from('user_profiles')
-        .select('id, full_name, telegram_chat_id')
+        .select('id, full_name, telegram_chat_id, notification_meeting_types')
         .eq('organization_id', organizationId)
         .not('telegram_chat_id', 'is', null)
 
     if (usersError) {
         return jsonResponse({ error: `Erro ao buscar usuários: ${usersError.message}` }, 500)
     }
+
+    // Filtra usuários pelo tipo de reunião: array vazio = recebe tudo
+    const users = (usersRaw || []).filter((u: { notification_meeting_types?: string[] }) => {
+        const types: string[] = u.notification_meeting_types || []
+        return types.length === 0 || (meetingType ? types.includes(meetingType) : true)
+    })
 
     // Busca contatos externos com Telegram vinculado, filtrados pelo tipo de reunião
     let contacts: Array<{ id: string; full_name: string; telegram_chat_id: number }> = []
@@ -114,31 +136,82 @@ Deno.serve(async (request: Request) => {
         timeZone: 'America/Sao_Paulo',
     })
 
-    // Monta o texto da mensagem
-    const lines = [
-        `📅 <b>Lembrete de Reunião</b>`,
-        ``,
+    // Bloco informativo base (compartilhado por todas as variantes de mensagem)
+    const baseInfo = [
         `<b>${title}</b>`,
         meetingTypeLabel ? `📋 ${meetingTypeLabel}` : '',
         `🕐 ${dateStr}`,
         location ? `📍 ${location}` : '',
-        ``,
-        `Confirme sua presença:`,
-    ].filter((l) => l !== '')
+    ].filter((l) => l !== '').join('\n')
 
-    const text = lines.join('\n')
+    // Texto do lembrete padrão (4 dias antes)
+    const text4days = `📅 <b>Lembrete de Reunião</b>\n\n${baseInfo}\n\nConfirme sua presença:`
 
-    // Botões inline de confirmação — montados por participante com UUID único
-    // Formato: c:UUID:yes ou c:UUID:no = ~42 bytes, bem abaixo do limite de 64 do Telegram
-
-    // Função auxiliar para buscar/criar confirmação e enviar mensagem
+    // Função auxiliar — envia mensagem adequada conforme tipo e status de confirmação
     async function sendToParticipant(
         participantId: string,
         chatId: number,
         idColumn: 'user_id' | 'telegram_contact_id',
         displayName: string
     ): Promise<{ ok: boolean; error?: string }> {
-        const { data: existing } = await supabase
+
+        // --- Lembrete do dia anterior (1day) ---
+        if (reminderType === '1day') {
+            const { data: existing1day } = await supabase
+                .from('meeting_confirmations')
+                .select('id, status')
+                .eq('google_event_id', googleEventId)
+                .eq(idColumn, participantId)
+                .maybeSingle()
+
+            // Já confirmou: mensagem apenas informativa
+            if (existing1day?.status === 'confirmed') {
+                const msg = `✅ <b>Lembrete: Reunião Amanhã</b>\n\n${baseInfo}\n\nVocê já confirmou sua presença. Até amanhã! 🎉`
+                return await sendSimpleMessage(botToken as string, chatId, msg)
+            }
+
+            // Já recusou: mensagem apenas informativa
+            if (existing1day?.status === 'declined') {
+                const msg = `📅 <b>Lembrete: Reunião Amanhã</b>\n\n${baseInfo}\n\nCaso tenha mudado de ideia, entre em contato com o secretário.`
+                return await sendSimpleMessage(botToken as string, chatId, msg)
+            }
+
+            // Pendente ou sem registro: solicita confirmação com urgência
+            const urgentText = `⚠️ <b>Lembrete: Reunião Amanhã!</b>\n\n${baseInfo}\n\nA reunião é amanhã! Por favor, confirme sua presença:`
+
+            let confirmationId1day: string
+            if (existing1day) {
+                confirmationId1day = existing1day.id
+            } else {
+                const insertData: Record<string, unknown> = {
+                    organization_id: organizationId,
+                    google_event_id: googleEventId,
+                    status: 'pending',
+                }
+                insertData[idColumn] = participantId
+                const { data: inserted, error: insertError } = await supabase
+                    .from('meeting_confirmations')
+                    .insert(insertData)
+                    .select('id')
+                    .single()
+                if (insertError || !inserted) {
+                    console.warn(`Falha ao criar confirmação para ${displayName}: ${insertError?.message}`)
+                    return { ok: false, error: `${displayName}: falha ao criar confirmação` }
+                }
+                confirmationId1day = inserted.id
+            }
+
+            const replyMarkup1day = {
+                inline_keyboard: [[
+                    { text: '✅ Confirmar presença', callback_data: `c:${confirmationId1day}:yes` },
+                    { text: '❌ Não poderei comparecer', callback_data: `c:${confirmationId1day}:no` },
+                ]],
+            }
+            return await sendMessage(botToken as string, chatId, urgentText, replyMarkup1day)
+        }
+
+        // --- Lembrete padrão (4 dias antes): sempre envia com botões ---
+        const { data: existingRecord } = await supabase
             .from('meeting_confirmations')
             .select('id')
             .eq('google_event_id', googleEventId)
@@ -146,8 +219,8 @@ Deno.serve(async (request: Request) => {
             .maybeSingle()
 
         let confirmationId: string
-        if (existing) {
-            confirmationId = existing.id
+        if (existingRecord) {
+            confirmationId = existingRecord.id
         } else {
             const insertData: Record<string, unknown> = {
                 organization_id: organizationId,
@@ -176,7 +249,7 @@ Deno.serve(async (request: Request) => {
             ]],
         }
 
-        return await sendMessage(botToken, chatId, text, replyMarkup)
+        return await sendMessage(botToken as string, chatId, text4days, replyMarkup)
     }
 
     let sent = 0
